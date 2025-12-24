@@ -4,49 +4,58 @@
 #include <string.h>
 #include <cstdlib>
 #include <time.h>
+#include <iostream>
 #include "header.h"
 
 #define DBG
 
-int main() {
-	Solucao sol, sol2;
+int main(int argc, char* argv[]) {
+	double arg_TI = 798.27;
+	double arg_TC = 0.12;
+	double arg_TR = 0.8656;
+	int arg_SAMAX = 151; // Se 0, vamos definir baseado no num_nos depois
+	double arg_TEM_MAX = 300;
+	int seed = 123456;
+	std::string instance_path = "instancias/SW-1000-4-0d1-trial1.txt";
 
-	ler_arquivo("instancias/SW-100-4-0d1-trial1.txt");
-	//escrever_dados(" ");
+	// 2. Parsing da Linha de Comando
+	for (int i = 1; i < argc; i++) {
+		std::string arg = argv[i];
+		if (arg == "--ti" && i + 1 < argc) arg_TI = std::atof(argv[++i]);
+		else if (arg == "--tc" && i + 1 < argc) arg_TC = std::atof(argv[++i]);
+		else if (arg == "--tr" && i + 1 < argc) arg_TR = std::atof(argv[++i]);
+		else if (arg == "--samax" && i + 1 < argc) arg_SAMAX = std::atoi(argv[++i]);
+		else if (arg == "--seed" && i + 1 < argc) seed = std::atoi(argv[++i]);
+		else if ((arg == "--instancia" || arg == "-i") && i + 1 < argc) instance_path = argv[++i];
+	}
 
-	//heu_const_gul(sol);
+	// 3. Configurar Semente e Leitura
+	srand(seed); // Importante para o irace!
 
-	//calcular_fo(sol);
-	//escrever_solucao(sol);
+	// Converter string para char* para sua funcao ler_arquivo
+	ler_arquivo(instance_path.c_str());
 
-	//memcpy(&sol2, &sol, sizeof(sol));
+	// Se SAMAX não foi passado (ou é 0), usa a lógica original (num_nos)
+	if (arg_SAMAX == 0) arg_SAMAX = num_nos;
 
-	//for (int i = 0; i < 1000; i++) {
-	//	gerar_vizinho2(sol2);
-	//	calcular_fo(sol2);
-	//	if (sol2.fo < sol.fo) {
-	//		memcpy(&sol, &sol2, sizeof(sol2));
-	//		escrever_solucao(sol);
-	//	}
-	//}
-	//escrever_solucao(sol);
+	Solucao sol;
 
-	heu_const_gul(sol);
+	// Construção Inicial
+	heu_const_ale(sol);
 	calcular_fo(sol);
-	escrever_solucao(sol);
 
-	double TI = 1000;
-	double TC = 0.01;
-	double TR = 0.975;
-	int SAMAX = num_nos;
-	double TEM_MAX = 50;
-	double TEM_TOT;
-	double TEM_MEL;
+	// Variáveis de Saída (dummy)
+	double TEM_TOT, TEM_MEL;
 	int NUM_SOL;
 
-	simulated_annealing(sol, TI, TC, TR, SAMAX, TEM_MAX, TEM_TOT, TEM_MEL, NUM_SOL);
+	// 4. Executar o SA com os parametros lidos
+	simulated_annealing(sol, arg_TI, arg_TC, arg_TR, arg_SAMAX, arg_TEM_MAX, TEM_TOT, TEM_MEL, NUM_SOL);
 
+	// 5. Saída para o irace (APENAS O NÚMERO DA FO)
+	// O irace minimiza por padrão. Como sua FO parece ser minimizar, está ok.
+	// Use printf ou cout, mas garanta que seja a única saída numérica na última linha.
 	escrever_solucao(sol);
+	std::cout << sol.fo << " " << TEM_TOT << std::endl;
 
 	return 0;
 }
@@ -234,7 +243,7 @@ void ler_arquivo(const char* path) {
 	FILE* f = fopen(path, "r");
 
 	if (f == NULL) {
-		printf("Erro: Nao foi possivel abrir o arquivo %s\n", path);
+		fprintf(stderr, "Erro: Nao foi possivel abrir o arquivo %s\n", path);
 		exit(1);
 	}
 

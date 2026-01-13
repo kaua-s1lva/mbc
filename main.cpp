@@ -4,6 +4,8 @@
 #include <string.h>
 #include <cstdlib>
 #include <time.h>
+#include <math.h>
+#include <limits.h>
 #include <iostream>
 #include "header.h"
 
@@ -14,9 +16,9 @@ int main(int argc, char* argv[]) {
 	double arg_TC = 0.12;
 	double arg_TR = 0.8656;
 	int arg_SAMAX = 151; // Se 0, vamos definir baseado no num_nos depois
-	double arg_TEM_MAX = 300;
+	double arg_TEM_MAX = 100;
 	int seed = 123456;
-	std::string instance_path = "instancias/SW-1000-4-0d1-trial1.txt";
+	std::string instance_path = "../instancias/SW-1000-4-0d1-trial1.txt";
 
 	// 2. Parsing da Linha de Comando
 	for (int i = 1; i < argc; i++) {
@@ -35,29 +37,67 @@ int main(int argc, char* argv[]) {
 	// Converter string para char* para sua funcao ler_arquivo
 	ler_arquivo(instance_path.c_str());
 
-	// Se SAMAX não foi passado (ou é 0), usa a lógica original (num_nos)
+	// Se SAMAX nï¿½o foi passado (ou ï¿½ 0), usa a lï¿½gica original (num_nos)
 	if (arg_SAMAX == 0) arg_SAMAX = num_nos;
 
 	Solucao sol;
 
-	// Construção Inicial
-	heu_const_ale(sol);
+	// Construï¿½ï¿½o Inicial
+	heu_const_gul(sol);
+	//heu_BL_rand(sol, 100);
 	calcular_fo(sol);
 
-	// Variáveis de Saída (dummy)
+	escrever_solucao(sol);
+
+	// Variï¿½veis de Saï¿½da (dummy)
 	double TEM_TOT, TEM_MEL;
 	int NUM_SOL;
 
 	// 4. Executar o SA com os parametros lidos
 	simulated_annealing(sol, arg_TI, arg_TC, arg_TR, arg_SAMAX, arg_TEM_MAX, TEM_TOT, TEM_MEL, NUM_SOL);
+	//heu_BL_MM(sol);
+	//calcular_fo(sol);
+	//grasp(sol, 0, 300, TEM_TOT, TEM_MEL, NUM_SOL);
 
-	// 5. Saída para o irace (APENAS O NÚMERO DA FO)
-	// O irace minimiza por padrão. Como sua FO parece ser minimizar, está ok.
-	// Use printf ou cout, mas garanta que seja a única saída numérica na última linha.
+	// 5. Saï¿½da para o irace (APENAS O Nï¿½MERO DA FO)
+	// O irace minimiza por padrï¿½o. Como sua FO parece ser minimizar, estï¿½ ok.
+	// Use printf ou cout, mas garanta que seja a ï¿½nica saï¿½da numï¿½rica na ï¿½ltima linha.
 	escrever_solucao(sol);
-	std::cout << sol.fo << " " << TEM_TOT << std::endl;
+	//std::cout << sol.fo << " " << TEM_TOT << std::endl;
 
 	return 0;
+}
+
+void grasp(Solucao& s, const double& LRC, const double& TEM_MAX,
+           double& TEM_TOT, double& TEM_MEL, int& NUM_SOL)
+{
+	Solucao s_viz;
+	
+	clock_t h = clock();
+	TEM_TOT = TEM_MEL = 0.0;
+	NUM_SOL = 1;
+	s.fo = INT_MAX;
+	while (TEM_TOT < TEM_MAX)
+	{
+		heu_const_ale_gul(s_viz);
+		calcular_fo(s_viz);
+		heu_BL_MM(s_viz);
+		
+		if (s_viz.fo < s.fo)
+		{
+			memcpy(&s, &s_viz, sizeof(Solucao));
+			TEM_MEL = (double)(clock() - h) / CLOCKS_PER_SEC;
+
+            #ifdef DBG
+			    printf("FO: %d\tTempo: %.2f\n", s.fo, TEM_MEL);
+            #endif
+		}
+		
+		NUM_SOL++;
+		printf("\n%d", NUM_SOL);
+
+		TEM_TOT = (double)(clock() - h) / CLOCKS_PER_SEC;
+	}
 }
 
 void simulated_annealing(Solucao& s, const double& TI, const double& TC,
@@ -77,7 +117,9 @@ void simulated_annealing(Solucao& s, const double& TI, const double& TC,
 			for (int i = 0; i < SAMAX; i++)
 			{
 				memcpy(&s_viz, &s_atu, sizeof(Solucao));
-				gerar_vizinho(s_viz);
+				static void (*vizinhancas[])(Solucao&) = { gerar_vizinho3, gerar_vizinho };
+    			vizinhancas[!(NUM_SOL % 100)](s_viz);
+				//gerar_vizinho3(s_viz);
 				//heu_BL_rand(s_viz, 1 * (num_moc + 1) * num_obj);
 				//calcular_fo_solucao(s_viz);
 				calcular_fo(s_viz);
@@ -110,6 +152,109 @@ void simulated_annealing(Solucao& s, const double& TI, const double& TC,
 		}
 	}
 FIM:;
+}
+
+void heu_BL_rand(Solucao& s, const int& iter) {
+    int mel_fo = s.fo;
+    while (true)
+    {
+        int flag = 1;
+        for (int i = 0; i < iter; i++)
+        {
+            int no = rand() % num_nos;
+            int no_origem = s.vet_sol[no];
+            int no_destino;
+            do
+                no_destino = rand() % num_nos;
+            while (no_destino == no_origem);
+            int fo_ori = s.fo;
+            s.vet_sol[no] = no_destino;
+            calcular_fo(s);
+            if (s.fo < mel_fo)
+            {
+                mel_fo = s.fo;
+                flag = 0;
+            }
+            else
+            {
+                s.vet_sol[no] = no_origem;
+                s.fo = fo_ori;
+            }
+        }
+        if (flag)
+            break;
+    }
+}
+
+void heu_BL_MM(Solucao& s) {
+    int mel_fo = s.fo;
+    while (true)
+    {
+        int mel_no_i, mel_no_j;
+        int flag = 0;
+        for (int j = NOS_FONTE; j < num_nos; j++)
+        {
+            //int no_ori = s.vet_sol[j];
+            for (int i = j+1; i < num_nos; i++)
+            {
+				int aux = s.vet_sol[j];
+				s.vet_sol[j] = s.vet_sol[i];
+				s.vet_sol[i] = aux;
+                calcular_fo(s);
+                if (s.fo < mel_fo)
+                {
+                    mel_fo = s.fo;
+                    mel_no_j = j;
+                    mel_no_i = i;
+                    flag = 1;
+					printf("\nFO: %d", s.fo);
+                }
+				aux = s.vet_sol[j];
+				s.vet_sol[j] = s.vet_sol[i];
+				s.vet_sol[i] = aux;
+				printf("\n[%d][%d]", j, i);
+            }
+        }
+        s.fo = mel_fo;
+        if (flag) {
+			int aux = s.vet_sol[mel_no_j];
+			s.vet_sol[mel_no_j] = s.vet_sol[mel_no_i];
+			s.vet_sol[mel_no_i] = aux;
+		}
+        else
+            break;
+    }
+}
+
+void heu_BL_PM(Solucao& s)
+{
+    int mel_fo = s.fo;
+    INICIO : ;
+    for (int j = NOS_FONTE; j < num_nos; j++)
+    {
+        int fo_ori = s.fo;
+        for (int i = j+1; i < num_nos; i++)
+        {
+			int aux = s.vet_sol[j];
+			s.vet_sol[j] = s.vet_sol[i];
+			s.vet_sol[i] = aux;
+			calcular_fo(s);
+            if (s.fo < mel_fo)
+            {
+                mel_fo = s.fo;
+				printf("\nFO: %d", s.fo);
+                goto INICIO;
+            }
+            else
+            {
+				aux = s.vet_sol[j];
+				s.vet_sol[j] = s.vet_sol[i];
+				s.vet_sol[i] = aux;
+                s.fo = fo_ori;
+            }
+        }
+    }
+    s.fo = mel_fo;
 }
 
 void heu_const_ale_gul(Solucao& sol) {
@@ -148,7 +293,7 @@ void heu_const_ale_gul(Solucao& sol) {
 }
 
 void heu_const_gul(Solucao& sol) {
-	//construir o vetor solução baseado na ordem do vetor_aux, colocar os nós com maior número de arestas primeiro
+	//construir o vetor soluï¿½ï¿½o baseado na ordem do vetor_aux, colocar os nï¿½s com maior nï¿½mero de arestas primeiro
 	int vet_aux[MAX_NOS];
 
 	memcpy(&vet_aux, &vet_qtd_rel, sizeof(vet_qtd_rel));
@@ -181,7 +326,7 @@ void heu_const_ale(Solucao& sol) {
 	}
 }
 
-//trocar NÓ FONTE por NÓ COMUM
+//trocar Nï¿½ FONTE por Nï¿½ COMUM
 void gerar_vizinho(Solucao& sol) {
 	int pos_origem = rand() % NOS_FONTE;
 	int pos_destino = (rand() % num_nos - NOS_FONTE) + NOS_FONTE;
@@ -191,7 +336,7 @@ void gerar_vizinho(Solucao& sol) {
 	sol.vet_sol[pos_destino] = aux;
 }
 
-//trocar QUALQUER NÓ
+//trocar QUALQUER Nï¿½
 void gerar_vizinho2(Solucao& sol) {
 	int pos_origem = rand() % num_nos;
 	int pos_destino = rand() % num_nos;
@@ -205,7 +350,37 @@ void gerar_vizinho2(Solucao& sol) {
 	sol.vet_sol[pos_destino] = aux;
 }
 
-void calcular_fo(Solucao& sol) {
+void gerar_vizinho3(Solucao& sol) {
+	int pos_no_fonte, no_fonte, pos_vizinhos[MAX_NOS], num_vizinhos=0, pos_origem, pos_destino, aux;
+	
+	pos_no_fonte = rand() % NOS_FONTE;
+	no_fonte = sol.vet_sol[pos_no_fonte];
+
+	if (vet_qtd_rel[no_fonte] > 1) {
+
+		for (int i=NOS_FONTE; i<num_nos; i++) {
+			if (mat_bin_rel[no_fonte][sol.vet_sol[i]]) {
+				pos_vizinhos[num_vizinhos] = i;
+				num_vizinhos++;
+			}
+		}
+
+		pos_origem = rand() % num_vizinhos;
+		pos_destino = rand() % num_vizinhos;
+
+		while (pos_destino == pos_origem) {
+			pos_destino = rand() % num_vizinhos;
+		}
+
+		aux = sol.vet_sol[pos_vizinhos[pos_origem]];
+		sol.vet_sol[pos_vizinhos[pos_origem]] = sol.vet_sol[pos_vizinhos[pos_destino]];
+		sol.vet_sol[pos_vizinhos[pos_destino]] = aux;
+	} else {
+		gerar_vizinho(sol);
+	}
+}
+
+void calcular_fo2(Solucao& sol) {
 	sol.fo = 0;
 
 	int order[MAX_NOS];
@@ -238,6 +413,90 @@ void calcular_fo(Solucao& sol) {
 	}
 }
 
+void calcular_fo(Solucao& sol) {
+	sol.fo = 0;
+
+    // Estruturas estÃ¡ticas para evitar alocaÃ§Ã£o de memÃ³ria repetitiva
+    static int prioridade[MAX_NOS];
+    static bool infectado[MAX_NOS];
+    static int fila_transmissores[MAX_NOS]; // Substitui o 'order'
+    
+    // InicializaÃ§Ã£o O(N)
+    // Se o MAX_NOS for muito grande (ex: > 10.000), use memset. Para < 1000, for loop Ã© ok.
+    for (int i = 0; i <= num_nos; i++) {
+        infectado[i] = false;
+        // Inicializa com um valor maior que qualquer Ã­ndice possÃ­vel
+        prioridade[i] = num_nos + 1; 
+    }
+
+    // 1. Configurar Fontes e Prioridades
+    // Os nÃ³s fonte entram na fila e sÃ£o marcados
+    for (int i = 0; i < NOS_FONTE; i++) {
+        int no = sol.vet_sol[i];
+        infectado[no] = true;
+        fila_transmissores[i] = no;
+    }
+
+    // Mapeia a prioridade dos candidatos.
+    // O nÃ³ que estÃ¡ em sol.vet_sol[k] tem prioridade 'k'.
+    // Isso permite verificar em O(1) qual vizinho aparece antes no cromossomo.
+    for (int i = NOS_FONTE; i < num_nos; i++) {
+        prioridade[sol.vet_sol[i]] = i;
+    }
+
+    int total_infectados = NOS_FONTE;
+    int tam_fila = NOS_FONTE;
+
+    // Vetor auxiliar para armazenar quem recebeu mensagem neste turno
+    // para adicionÃ¡-los Ã  fila apenas no final do pulso de clock.
+    static int novos_neste_turno[MAX_NOS]; 
+
+    // 2. Loop de Tempo (SimulaÃ§Ã£o)
+    while (total_infectados < num_nos) {
+        sol.fo++;
+        int qtd_novos = 0;
+        int snapshot_tam_fila = tam_fila; // Apenas quem JÃ tinha a mensagem transmite
+
+        // Loop sobre os transmissores ativos (O(N_infectados))
+        for (int i = 0; i < snapshot_tam_fila; i++) {
+            int transmissor = fila_transmissores[i];
+            
+            int melhor_vizinho = -1;
+            int melhor_prio = num_nos + 1;
+
+            // Loop sobre os vizinhos (O(Grau_do_no)) - Muito mais rÃ¡pido que O(N)
+            for (int k = 0; k < vet_qtd_rel[transmissor]; k++) {
+                int vizinho = mat_rel[transmissor][k];
+
+                if (!infectado[vizinho]) {
+                    // Verifica se esse vizinho tem prioridade maior (menor Ã­ndice)
+                    // do que o melhor encontrado atÃ© agora para este transmissor
+                    if (prioridade[vizinho] < melhor_prio) {
+                        melhor_prio = prioridade[vizinho];
+                        melhor_vizinho = vizinho;
+                    }
+                }
+            }
+
+            // Se o transmissor conseguiu encontrar um alvo livre
+            if (melhor_vizinho != -1) {
+                infectado[melhor_vizinho] = true; // Marca como usado para que outro transmissor NESTE MESMO turno nÃ£o o pegue
+                novos_neste_turno[qtd_novos++] = melhor_vizinho;
+                total_infectados++;
+            }
+        }
+
+        // Adiciona os novos infectados Ã  fila principal de transmissores para os prÃ³ximos turnos
+        for (int i = 0; i < qtd_novos; i++) {
+            fila_transmissores[tam_fila++] = novos_neste_turno[i];
+        }
+        
+        // Se em um turno ninguÃ©m for infectado e ainda restam nÃ³s, temos um grafo desconexo
+        // ou isolado (break de seguranÃ§a para evitar loop infinito, opcional)
+        if (qtd_novos == 0 && total_infectados < num_nos) break; 
+    }
+}
+
 void ler_arquivo(const char* path) {
 	int a, b;
 	FILE* f = fopen(path, "r");
@@ -254,6 +513,10 @@ void ler_arquivo(const char* path) {
 
 	for (int i = 0; i < num_arestas; i++) {
 		fscanf(f, "%d %d", &a, &b);
+
+		mat_rel[a][ vet_qtd_rel[a] ] = b;
+		mat_rel[b][ vet_qtd_rel[b] ] = a;
+
 		mat_bin_rel[a][b] = 1;
 		vet_qtd_rel[a]++;
 		mat_bin_rel[b][a] = 1;

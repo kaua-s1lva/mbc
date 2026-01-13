@@ -17,12 +17,19 @@ int vet_qtd_rel[MAX_NOS];
 void ler_arquivo(const char* path);
 void escrever_dados(const char* arq);
 void calcular_fo(Solucao& sol);
+void calcular_fo2(Solucao& sol);
 void escrever_solucao(Solucao& sol);
 void gerar_vizinho(Solucao& sol);
 void gerar_vizinho2(Solucao& sol);
+void gerar_vizinho3(Solucao& sol);
 void heu_const_ale(Solucao& sol);
 void heu_const_gul(Solucao& sol);
 void heu_const_ale_gul(Solucao& sol);
+void heu_BL_rand(Solucao& s, const int& iter);
+void heu_BL_MM(Solucao& s);
+void heu_BL_PM(Solucao& s);
 void simulated_annealing(Solucao& s, const double& TI, const double& TC,
 	const double& TR, const int& SAMAX, const double& TEM_MAX,
 	double& TEM_TOT, double& TEM_MEL, int& NUM_SOL);
+void grasp(Solucao& s, const double& LRC, const double& TEM_MAX,
+           double& TEM_TOT, double& TEM_MEL, int& NUM_SOL);

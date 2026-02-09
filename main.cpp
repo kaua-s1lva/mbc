@@ -10,17 +10,26 @@
 #include "header.h"
 
 #define DBG
+//#define IRACE_MODE
+//#define DEBUG_MODE
+#define RELEASE_MODE
 
 int main(int argc, char* argv[]) {
-	double arg_TI = 798.27;
-	double arg_TC = 0.12;
-	double arg_TR = 0.8656;
-	int arg_SAMAX = 151; // Se 0, vamos definir baseado no num_nos depois
-	double arg_TEM_MAX = 100;
-	int seed = 123456;
-	std::string instance_path = "../instancias/SW-1000-4-0d1-trial1.txt";
 
-	// 2. Parsing da Linha de Comando
+#ifdef IRACE_MODE
+
+	double arg_TI = 1418.49;
+	double arg_TC = 0.79;
+	double arg_TR = 0.8976;
+	int arg_SAMAX = 348;
+	double arg_TEM_MAX = 300;
+
+	double TEM_TOT, TEM_MEL;
+	int NUM_SOL;
+
+	int seed = 123456;
+	std::string instance_path = "instancias/SW-100-6-0d2-trial1.txt";
+
 	for (int i = 1; i < argc; i++) {
 		std::string arg = argv[i];
 		if (arg == "--ti" && i + 1 < argc) arg_TI = std::atof(argv[++i]);
@@ -31,39 +40,167 @@ int main(int argc, char* argv[]) {
 		else if ((arg == "--instancia" || arg == "-i") && i + 1 < argc) instance_path = argv[++i];
 	}
 
-	// 3. Configurar Semente e Leitura
-	srand(seed); // Importante para o irace!
+	srand(seed);
 
-	// Converter string para char* para sua funcao ler_arquivo
 	ler_arquivo(instance_path.c_str());
 
-	// Se SAMAX n�o foi passado (ou � 0), usa a l�gica original (num_nos)
 	if (arg_SAMAX == 0) arg_SAMAX = num_nos;
 
 	Solucao sol;
 
-	// Constru��o Inicial
-	heu_const_gul(sol);
-	//heu_BL_rand(sol, 100);
+	heu_const_ale(sol);
+
 	calcular_fo(sol);
 
-	escrever_solucao(sol);
+	simulated_annealing(sol, arg_TI, arg_TC, arg_TR, arg_SAMAX, arg_TEM_MAX, TEM_TOT, TEM_MEL, NUM_SOL);
 
-	// Vari�veis de Sa�da (dummy)
+	std::cout << sol.fo << " " << TEM_TOT << std::endl;
+#endif
+
+
+#ifdef DEBUG_MODE
+	double arg_TI = 1418.49;
+	double arg_TC = 0.79;
+	double arg_TR = 0.8976;
+	int arg_SAMAX = 348;
+	double arg_TEM_MAX = 300;
 	double TEM_TOT, TEM_MEL;
 	int NUM_SOL;
+	char instance[] = "instancias/SW-100-6-0d2-trial1.txt";
 
-	// 4. Executar o SA com os parametros lidos
+	srand(time(NULL));
+
+	ler_arquivo(instance);
+
+	Solucao sol;
+
+	heu_const_ale(sol);
+
+	calcular_fo(sol);
+
 	simulated_annealing(sol, arg_TI, arg_TC, arg_TR, arg_SAMAX, arg_TEM_MAX, TEM_TOT, TEM_MEL, NUM_SOL);
-	//heu_BL_MM(sol);
-	//calcular_fo(sol);
-	//grasp(sol, 0, 300, TEM_TOT, TEM_MEL, NUM_SOL);
+#endif
 
-	// 5. Sa�da para o irace (APENAS O N�MERO DA FO)
-	// O irace minimiza por padr�o. Como sua FO parece ser minimizar, est� ok.
-	// Use printf ou cout, mas garanta que seja a �nica sa�da num�rica na �ltima linha.
-	escrever_solucao(sol);
-	//std::cout << sol.fo << " " << TEM_TOT << std::endl;
+#ifdef RELEASE_MODE
+	double arg_TI = 1418.49;
+	double arg_TC = 0.79;
+	double arg_TR = 0.8976;
+	int arg_SAMAX = 348;
+	double arg_TEM_MAX = 300;
+	double TEM_TOT, TEM_MEL;
+	int NUM_SOL;
+	int total_exec = 3;
+	char instances[][50] = { "H10_30", "H9_30", "SW-100-4-0d1-trial1", "SW-100-5-0d1-trial1", "SW-100-6-0d1-trial3", "SW-100-6-0d2-trial1" };
+
+	FILE* f = fopen("resultados.csv", "w");
+
+	fprintf(f, "Instância;Melhor FO;FO Média;Desvio (%%);Tempo Médio (seg.);T. Melhor (seg.)\n");
+
+	srand(time(NULL));
+
+	for (int i = 0; i < (sizeof(instances) / sizeof(instances[0])); i++) {
+
+#ifdef DBG
+		printf("\nExecutando instancia: %s\n", instances[i]);
+#endif 
+
+		char instance[100] = "instancias/";
+		strcat(instance, instances[i]);
+		strcat(instance, ".txt");
+		ler_arquivo(instance);
+
+		Solucao sol, mel_sol;
+		mel_sol.fo = INT_MAX;
+
+		int total_fo=0;
+		double total_tempo=0, total_mel_tempo=0;
+
+		for (int j = 0; j < total_exec; j++) {
+#ifdef DBG
+			printf("\nEtapa: %d\n", j+1);
+#endif 
+			heu_const_ale(sol);
+
+			calcular_fo(sol);
+
+			simulated_annealing(sol, arg_TI, arg_TC, arg_TR, arg_SAMAX, arg_TEM_MAX, TEM_TOT, TEM_MEL, NUM_SOL);
+
+			total_fo += sol.fo;
+			total_tempo += TEM_TOT;
+			total_mel_tempo += TEM_MEL;
+
+			if (sol.fo < mel_sol.fo) {
+				memcpy(&mel_sol, &sol, sizeof(Solucao));
+			}
+		}
+		double fo_media = total_fo / total_exec;
+		double desvio = (fabs((total_fo / total_exec) - mel_sol.fo) / mel_sol.fo);
+		double tempo_medio = (total_tempo / total_exec);
+		double mel_tempo_medio = (total_mel_tempo / total_exec);
+
+		fprintf(f, "%s;%d;%.3f;%.3f%%;%.3f;%.3f\n", 
+			instances[i], //instancia
+			mel_sol.fo, //Melhor FO
+			fo_media, //FO Média
+			desvio, //Desvio (%)
+			tempo_medio, //Tempo Médio (seg.)
+			mel_tempo_medio //T. Melhor (seg.)
+		);
+
+		char arq_solucao[100] = "solucoes/";
+		strcat(arq_solucao, instances[i]);
+		strcat(arq_solucao, ".txt");
+
+		FILE* s = fopen(arq_solucao, "w");
+
+		fprintf(s, "--- Relatorio da Solucao Otimizada ---\n\n");
+
+		fprintf(s, "Tempo de transmissao: %d\n\n", mel_sol.fo);
+
+		fprintf(s, "Nos Escolhidos:\n");
+
+		for (int i = 0; i < NOS_FONTE; i++) {
+			fprintf(s, "  - %d\n", mel_sol.vet_sol[i]);
+		}
+
+		fprintf(s, "\nArestas Usadas no Caminho:\n");
+		fprintf(s, "tempo, origem, destino\n");
+
+		int order[MAX_NOS];
+		int vet_aux[MAX_NOS];
+
+		for (int i = 0; i < NOS_FONTE; i++) {
+			order[i] = mel_sol.vet_sol[i];
+		}
+
+		for (int i = NOS_FONTE; i < num_nos; i++) {
+			vet_aux[i - NOS_FONTE] = mel_sol.vet_sol[i];
+		}
+
+		int tam_order = NOS_FONTE;
+		int aux;
+
+		for(int t=1; t<=mel_sol.fo; t++) {
+			aux = tam_order;
+			for (int i = 0; i < aux; i++) {
+				for (int j = 0; j < num_nos - NOS_FONTE; j++) {
+					if (mat_bin_rel[order[i]][vet_aux[j]]) {
+						fprintf(s, "%d, %d, %d\n", t, order[i], vet_aux[j]);
+						order[tam_order] = vet_aux[j];
+						vet_aux[j] = 0;
+						tam_order++;
+						break;
+					}
+				}
+			}
+		}
+
+		fclose(s);
+	}
+
+	fclose(f);
+
+#endif
 
 	return 0;
 }
@@ -81,7 +218,7 @@ void grasp(Solucao& s, const double& LRC, const double& TEM_MAX,
 	{
 		heu_const_ale_gul(s_viz);
 		calcular_fo(s_viz);
-		heu_BL_MM(s_viz);
+		//heu_BL_MM(s_viz);
 		
 		if (s_viz.fo < s.fo)
 		{
@@ -121,7 +258,6 @@ void simulated_annealing(Solucao& s, const double& TI, const double& TC,
     			vizinhancas[!(NUM_SOL % 100)](s_viz);
 				//gerar_vizinho3(s_viz);
 				//heu_BL_rand(s_viz, 1 * (num_moc + 1) * num_obj);
-				//calcular_fo_solucao(s_viz);
 				calcular_fo(s_viz);
 				NUM_SOL++;
 				double delta = s_atu.fo - s_viz.fo;
